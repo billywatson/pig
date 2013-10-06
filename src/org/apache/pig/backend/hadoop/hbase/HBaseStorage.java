@@ -167,6 +167,7 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
     private final long minTimestamp_;
     private final long maxTimestamp_;
     private final long timestamp_;
+    private final int timestampVersionFieldIndex_;
 
     protected transient byte[] gt_;
     protected transient byte[] gte_;
@@ -195,7 +196,7 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
         validOptions_.addOption("minTimestamp", true, "Record must have timestamp greater or equal to this value");
         validOptions_.addOption("maxTimestamp", true, "Record must have timestamp less then this value");
         validOptions_.addOption("timestamp", true, "Record must have timestamp equal to this value");
-
+        validOptions_.addOption("timestampVersionFieldIndex", true, "Field index of the field to be used as the HBase timestamp version");
     }
 
     /**
@@ -238,6 +239,7 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
      * <li>-maxTimestamp= Scan's timestamp for max timeRange
      * <li>-timestamp= Scan's specified timestamp
      * <li>-caster=(HBaseBinaryConverter|Utf8StorageConverter) Utf8StorageConverter is the default
+     * <li>-timestampVersionFieldIndex=fieldIndex the index of the input field to use as the HBase row version (default -1 which means the current timestamp is used)
      * To be used with extreme caution, since this could result in data loss
      * (see http://hbase.apache.org/book.html#perf.hbase.client.putwal).
      * </ul>
@@ -311,6 +313,12 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
             timestamp_ = Long.parseLong(configuredOptions_.getOptionValue("timestamp"));
         } else {
             timestamp_ = 0;
+        }
+
+        if (configuredOptions_.hasOption("timestampVersionFieldIndex")) {
+            timestampVersionFieldIndex_ = Integer.parseInt(configuredOptions_.getOptionValue("timestampVersionFieldIndex"));
+        } else {
+            timestampVersionFieldIndex_ = -1;
         }
 
         initScan();
@@ -852,7 +860,7 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
     public void putNext(Tuple t) throws IOException {
         ResourceFieldSchema[] fieldSchemas = (schema_ == null) ? null : schema_.getFields();
         byte type = (fieldSchemas == null) ? DataType.findType(t.get(0)) : fieldSchemas[0].getType();
-        long ts=System.currentTimeMillis();
+        long ts = (timestampVersionFieldIndex_ == -1) ? System.currentTimeMillis() : Long.parseLong((String) t.get(timestampVersionFieldIndex_));
 
         Put put = createPut(t.get(0), type);
 

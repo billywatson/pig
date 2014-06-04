@@ -197,9 +197,10 @@ public class KeyDistribution {
       Map.Entry<RawComparable, BlockDistribution> mapEntry = it.next();
       bd0 = mapEntry.getValue();
       mySize = bd0.getLength();
-      if (realSize >= minStepSize/2 ||
-          (realSize + mySize >= minStepSize*ColumnGroup.SPLIT_SLOP && 
-              realSize >= minStepSize * (ColumnGroup.SPLIT_SLOP-1)))
+      if (bd != null && 
+          (realSize >= minStepSize/2 ||
+            (realSize + mySize >= minStepSize*ColumnGroup.SPLIT_SLOP && 
+               realSize >= minStepSize * (ColumnGroup.SPLIT_SLOP-1))))
       {
         adjusted.add(key, bd);
         bd = null;

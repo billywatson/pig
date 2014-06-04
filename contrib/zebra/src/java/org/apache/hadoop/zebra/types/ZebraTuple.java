@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.pig.data.Tuple;
 import org.apache.pig.data.DefaultTuple;
 import org.apache.pig.impl.util.TupleFormat;
 import org.apache.commons.logging.Log;
@@ -79,6 +80,11 @@ public class ZebraTuple extends DefaultTuple {
    */
   ZebraTuple(List<Object> c, int junk) {
     mFields = c;
+  }
+
+  @Override 
+  public void reference(Tuple t) {
+      mFields = t.getAll();
   }
 
   @Override

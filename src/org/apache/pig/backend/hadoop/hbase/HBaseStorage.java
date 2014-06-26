@@ -16,8 +16,6 @@
  */
 package org.apache.pig.backend.hadoop.hbase;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -60,6 +58,7 @@ import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.mapreduce.TableOutputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableSplit;
+import org.apache.hadoop.hbase.mapreduce.TableRecordReader;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.JobConf;
@@ -75,6 +74,8 @@ import org.apache.pig.LoadFunc;
 import org.apache.pig.LoadPushDown;
 import org.apache.pig.LoadStoreCaster;
 import org.apache.pig.OrderedLoadFunc;
+import org.apache.pig.CollectableLoadFunc;
+import org.apache.pig.IndexableLoadFunc;
 import org.apache.pig.ResourceSchema;
 import org.apache.pig.ResourceSchema.ResourceFieldSchema;
 import org.apache.pig.StoreFuncInterface;
@@ -131,7 +132,8 @@ import com.google.common.collect.Lists;
  * <code>buddies</code> column family in the <code>SampleTableCopy</code> table.
  *
  */
-public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPushDown, OrderedLoadFunc {
+public class HBaseStorage extends LoadFunc implements 
+    StoreFuncInterface, LoadPushDown, OrderedLoadFunc, CollectableLoadFunc, IndexableLoadFunc {
 
     private static final Log LOG = LogFactory.getLog(HBaseStorage.class);
 
@@ -1051,28 +1053,78 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
         return new RequiredFieldResponse(true);
     }
 
-    @Override
-    public WritableComparable<InputSplit> getSplitComparable(InputSplit split)
-            throws IOException {
-        return new WritableComparable<InputSplit>() {
-            TableSplit tsplit = new TableSplit();
-
-            @Override
-            public void readFields(DataInput in) throws IOException {
-                tsplit.readFields(in);
-}
-
-            @Override
-            public void write(DataOutput out) throws IOException {
-                tsplit.write(out);
-            }
-
-            @Override
-            public int compareTo(InputSplit split) {
-                return tsplit.compareTo((TableSplit) split);
-            }
-        };
+    /**
+     * IndexableLoadFunc implementation
+     */
+    public void initialize(Configuration conf) throws IOException {
+        LOG.info("IndexableLoadFunc.initialize: " + conf.toString());
     }
+
+    /**
+      * IndexableLoadFunc is only supported for joins/groups on the row key.
+      * If you pass another column the output will not be correct.
+      */
+    public void seekNear(Tuple keys) throws IOException {        
+        LOG.debug("seekNear called with " + keys.size() + " keys");
+
+        // make sure we have the right type of reader first
+        if (!(reader instanceof TableRecordReader))
+            throw new RuntimeException("seekNear expected RecordReader of type TableRecordReader but was " + reader.getClass().getName());
+
+        if (keys.size() == 1) {
+            Object key = keys.get(0);
+            if (key instanceof byte[])
+                ((TableRecordReader)reader).restart((byte[])key);
+            else if (key instanceof BigDecimal)
+                ((TableRecordReader)reader).restart(Bytes.toBytes((BigDecimal)key));
+            else if (key instanceof Boolean)
+                ((TableRecordReader)reader).restart(Bytes.toBytes(((Boolean)key).booleanValue()));
+            else if (key instanceof Double)
+                ((TableRecordReader)reader).restart(Bytes.toBytes(((Double)key).doubleValue()));
+            else if (key instanceof Float)
+                ((TableRecordReader)reader).restart(Bytes.toBytes(((Float)key).floatValue()));
+            else if (key instanceof Long)
+                ((TableRecordReader)reader).restart(Bytes.toBytes(((Long)key).longValue()));
+            else if (key instanceof Short)
+                ((TableRecordReader)reader).restart(Bytes.toBytes(((Short)key).shortValue()));
+            else if (key instanceof Integer)
+                ((TableRecordReader)reader).restart(Bytes.toBytes(((Integer)key).intValue()));
+            else if (key instanceof String)
+                ((TableRecordReader)reader).restart(Bytes.toBytes((String)key));
+            else 
+                throw new RuntimeException("Unsupported join key type merge join/group: " + key.getClass().getName());
+        } else {
+            // @todo - we could allow multiple keys but only use the first one allowing people to
+            // use join keys that match, but this would require a seek filter to make sure we start
+            // at the correct row for the other columns
+            throw new RuntimeException("Currently only the row key is supported for merge joins/groups, but " + keys.size() + " keys were supplied.");
+        }
+    }
+
+    public void close() throws IOException {
+        LOG.debug("close");
+    }
+
+    /**
+     * CollectableLoadFunc implementation
+     */
+    public void ensureAllKeyInstancesInSameSplit() throws IOException {
+        /** 
+         * no-op because hbase keys are unique 
+         * This will also work with things like DelimitedKeyPrefixRegionSplitPolicy
+         * if you need a partial key match to be included in the split
+        */
+        LOG.debug("ensureAllKeyInstancesInSameSplit");
+    }
+
+    @Override
+    public WritableComparable<TableSplit> getSplitComparable(InputSplit split) throws IOException {
+        if (split instanceof TableSplit) {
+            return new TableSplitComparable((TableSplit) split);
+        } else {
+            throw new RuntimeException("LoadFunc expected split of type TableSplit but was " + split.getClass().getName());
+        }
+     }
 
     /**
      * Class to encapsulate logic around which column names were specified in each

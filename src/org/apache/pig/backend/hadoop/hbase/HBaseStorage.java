@@ -1057,22 +1057,22 @@ public class HBaseStorage extends LoadFunc implements
      * IndexableLoadFunc implementation
      */
     public void initialize(Configuration conf) throws IOException {
-        LOG.info("IndexableLoadFunc.initialize: " + conf.toString());
+        // setup the reader without any splits since they will be determined by the left relation
+        HBaseTableInputFormat inputFormat = (HBaseTableInputFormat)getInputFormat();
+        inputFormat.setScan(scan);
+        reader = inputFormat.createRecordReader();
+        ((TableRecordReader)reader).restart(scan.getStartRow());
     }
 
     /**
       * IndexableLoadFunc is only supported for joins/groups on the row key.
       * If you pass another column the output will not be correct.
       */
-    public void seekNear(Tuple keys) throws IOException {        
-        LOG.debug("seekNear called with " + keys.size() + " keys");
-
-        // make sure we have the right type of reader first
-        if (!(reader instanceof TableRecordReader))
-            throw new RuntimeException("seekNear expected RecordReader of type TableRecordReader but was " + reader.getClass().getName());
-
+    public void seekNear(Tuple keys) throws IOException {
         if (keys.size() == 1) {
             Object key = keys.get(0);
+
+            // @todo - only seek if greater than start row and less than end row
             if (key instanceof byte[])
                 ((TableRecordReader)reader).restart((byte[])key);
             else if (key instanceof BigDecimal)
@@ -1093,6 +1093,7 @@ public class HBaseStorage extends LoadFunc implements
                 ((TableRecordReader)reader).restart(Bytes.toBytes((String)key));
             else 
                 throw new RuntimeException("Unsupported join key type merge join/group: " + key.getClass().getName());
+
         } else {
             // @todo - we could allow multiple keys but only use the first one allowing people to
             // use join keys that match, but this would require a seek filter to make sure we start
@@ -1102,7 +1103,7 @@ public class HBaseStorage extends LoadFunc implements
     }
 
     public void close() throws IOException {
-        LOG.debug("close");
+        reader.close();
     }
 
     /**

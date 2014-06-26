@@ -27,15 +27,19 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.client.HTable;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.filter.BinaryComparator;
 import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.RowFilter;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableRecordReader;
 import org.apache.hadoop.hbase.mapreduce.TableSplit;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.RecordReader;
 
 public class HBaseTableInputFormat extends TableInputFormat {
     private static final Log LOG = LogFactory.getLog(HBaseTableInputFormat.class);
@@ -99,6 +103,21 @@ public class HBaseTableInputFormat extends TableInputFormat {
             }
         }
         return splits;
+    }
+
+    /**
+      * Return a RecordReader with no splits for use in IndexableLoadFunc
+      */
+    public RecordReader<ImmutableBytesWritable, Result> createRecordReader()
+        throws IOException {
+
+        HTable table =
+            new HTable(getConf(), getConf().get(TableInputFormat.INPUT_TABLE));
+
+        TableRecordReader trr = new HBaseTableRecordReader(-1);
+        trr.setScan(getScan());
+        trr.setHTable(table);
+        return trr;
     }
 
     private boolean skipRegion(CompareOp op, byte[] key, byte[] option ) {

@@ -632,8 +632,62 @@ public class TestHBaseStorage {
         Assert.assertEquals(count, TEST_ROW_COUNT);
     }
 
+    // @todo - test this stuff with filters
+
     /**
-     * Do a group on using merge to test IndexableLoadFunc and CollectableLoader
+     * Do a group on using collected to test CollectableLoadFunc
+     * @todo - not much to test here since keys are unique, we would have
+     * to use a prefix policy to really test it
+     * @throws IOException
+     */
+    @Test
+    public void testCollectedGroup() throws IOException {
+        prepareTable(TESTTABLE_1, true, DataFormat.HBaseBinary);
+        prepareTable(TESTTABLE_2, true, DataFormat.HBaseBinary);
+        pig.registerQuery("a = load 'hbase://" + TESTTABLE_1 + "' using "
+                        + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                        + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
+        pig.registerQuery("c = group a by rowKey USING 'collected';");
+        pig.registerQuery("d = ORDER c BY group;");
+
+        // do a merge group
+        Iterator<Tuple> it = pig.openIterator("d");
+        int count = 0;
+        LOG.info("CollectedGroup Starting");
+        while (it.hasNext()) {
+            Tuple t = it.next();
+
+            String rowKey = (String)t.get(0);
+
+            Assert.assertEquals("00".substring((count + "").length()) + count,
+                    rowKey);
+
+            int rowCount = 0;
+            DataBag rows = (DataBag)t.get(1);
+            for (Iterator<Tuple> iter = rows.iterator(); iter.hasNext();) {
+                Tuple row = iter.next();
+
+                // there should be two bags with all 3 columns
+                int col_a = (Integer) row.get(1);
+                double col_b = (Double) row.get(2);
+                String col_c = (String) row.get(3);
+                
+                Assert.assertEquals(count, col_a);
+                Assert.assertEquals(count + 0.0, col_b, 1e-6);
+                Assert.assertEquals("Text_" + count, col_c);
+                rowCount++;
+            }
+            Assert.assertEquals(1, rowCount);
+
+            count++;
+        }
+        Assert.assertEquals(TEST_ROW_COUNT, count);
+        LOG.info("CollectedGroup done");
+    }
+
+    /**
+     * Do a group on using merge to test IndexableLoadFunc
      *
      * @throws IOException
      */
@@ -646,11 +700,11 @@ public class TestHBaseStorage {
                         + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
                         + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
         pig.registerQuery("b = load 'hbase://" + TESTTABLE_2 + "' using "
-                + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
-                + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
-                + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
-        pig.registerQuery("c = join a by rowKey, b by rowKey USING 'merge';");
-        pig.registerQuery("d = ORDER c BY a::rowKey;");
+                        + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                        + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
+        pig.registerQuery("c = group a by rowKey, b by rowKey USING 'merge';");
+        pig.registerQuery("d = ORDER c BY group;");
 
         // do a merge group
         Iterator<Tuple> it = pig.openIterator("d");
@@ -659,8 +713,7 @@ public class TestHBaseStorage {
         while (it.hasNext()) {
             Tuple t = it.next();
 
-            Tuple group = (Tuple)t.get(0);
-            String rowKey = ((DataByteArray) group.get(0)).toString();
+            String rowKey = (String)t.get(0);
 
             Assert.assertEquals("00".substring((count + "").length()) + count,
                     rowKey);

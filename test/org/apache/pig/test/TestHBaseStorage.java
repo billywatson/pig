@@ -580,7 +580,9 @@ public class TestHBaseStorage {
     }
 
     /**
-     * Test if merge join works with HBaseStorage.
+     * Test merge inner join with two tables
+     *
+     * @throws IOException
      */
     @Test
     public void testMergeJoin() throws IOException {
@@ -591,9 +593,9 @@ public class TestHBaseStorage {
                         + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
                         + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
         pig.registerQuery("b = load 'hbase://" + TESTTABLE_2 + "' using "
-                + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
-                + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
-                + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
+                        + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                        + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
         pig.registerQuery("c = join a by rowKey, b by rowKey USING 'merge';");
         pig.registerQuery("d = ORDER c BY a::rowKey;");
 
@@ -630,14 +632,78 @@ public class TestHBaseStorage {
             count++;
         }
         Assert.assertEquals(count, TEST_ROW_COUNT);
+        LOG.info("MergeJoin done");
     }
 
-    // @todo - test this stuff with filters
+    /**
+     * Test merge outer join with IndexableLoadFunc
+     *
+     * @throws IOException
+     */
+    @Test
+    public void testMergeOuterJoin() throws IOException {
+        prepareTable(TESTTABLE_1, true, DataFormat.HBaseBinary);
+        prepareTable(TESTTABLE_2, true, DataFormat.HBaseBinary);
+        pig.registerQuery("a = load 'hbase://" + TESTTABLE_1 + "' using "
+                        + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                        + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:bytearray,col_a:int, col_b:double, col_c:chararray);");
+        pig.registerQuery("b = load 'hbase://" + TESTTABLE_2 + "' using "
+                        + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                        + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:bytearray,col_a:int, col_b:double, col_c:chararray);");
+        pig.registerQuery("c = join a by rowKey LEFT OUTER, b by rowKey USING 'merge';");
+        // fix the schema because cogroup merge doesn't handle it
+        pig.registerQuery("d = FOREACH c GENERATE $0 as a::rowKey, a::col_a, a::col_b, a::col_c, $4 as b::rowKey, $5 as int, $6 as b::col_b:double, $7 as b::col_c:chararray;");
+        pig.registerQuery("e = ORDER d BY a::rowKey;");
+
+        Iterator<Tuple> it = pig.openIterator("e");
+        int count = 0;
+        LOG.info("MergeOuterJoin Starting");
+        while (it.hasNext()) {
+            Tuple t = it.next();
+            // the columns for both relations should be merged into one tuple
+            // left side
+            String rowKey = ((DataByteArray) t.get(0)).toString();
+            int col_a = (Integer) t.get(1);
+            double col_b = (Double) t.get(2);
+            String col_c = (String) t.get(3);
+
+            Assert.assertEquals("00".substring((count + "").length()) + count,
+                    rowKey);
+            Assert.assertEquals(count, col_a);
+            Assert.assertEquals(count + 0.0, col_b, 1e-6);
+            Assert.assertEquals("Text_" + count, col_c);
+
+            // right side
+            rowKey = ((DataByteArray) t.get(4)).toString();
+            col_a = (Integer) t.get(5);
+            col_b = (Double) t.get(6);
+            col_c = (String) t.get(7);
+
+            // if I change to this the test passes
+            // but we need the schema and casting with a foreach breaks as well
+            // rowKey = ((DataByteArray) t.get(4)).toString();
+            // col_a = Bytes.toInt(((DataByteArray)t.get(5)).get());
+            // col_b = Bytes.toDouble(((DataByteArray)t.get(6)).get());
+            // col_c = ((DataByteArray) t.get(7)).toString();
+
+            Assert.assertEquals("00".substring((count + "").length()) + count,
+                    rowKey);
+            Assert.assertEquals(count, col_a);
+            Assert.assertEquals(count + 0.0, col_b, 1e-6);
+            Assert.assertEquals("Text_" + count, col_c);
+            
+            count++;
+        }
+        Assert.assertEquals(count, TEST_ROW_COUNT);
+        LOG.info("MergeOuterJoin done");
+    }
 
     /**
-     * Do a group on using collected to test CollectableLoadFunc
-     * @todo - not much to test here since keys are unique, we would have
-     * to use a prefix policy to really test it
+     * Test collected group 
+     * not much to test here since keys are unique, we would have
+     * 
      * @throws IOException
      */
     @Test
@@ -687,7 +753,7 @@ public class TestHBaseStorage {
     }
 
     /**
-     * Do a group on using merge to test IndexableLoadFunc
+     * Test merge group
      *
      * @throws IOException
      */
@@ -698,11 +764,11 @@ public class TestHBaseStorage {
         pig.registerQuery("a = load 'hbase://" + TESTTABLE_1 + "' using "
                         + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
                         + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
-                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:bytearray,col_a:int, col_b:double, col_c:chararray);");
         pig.registerQuery("b = load 'hbase://" + TESTTABLE_2 + "' using "
                         + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
                         + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
-                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:bytearray,col_a:int, col_b:double, col_c:chararray);");
         pig.registerQuery("c = group a by rowKey, b by rowKey USING 'merge';");
         pig.registerQuery("d = ORDER c BY group;");
 
@@ -727,7 +793,7 @@ public class TestHBaseStorage {
                 int col_a = (Integer) t.get(1);
                 double col_b = (Double) t.get(2);
                 String col_c = (String) t.get(3);
-                
+             
                 Assert.assertEquals(count, col_a);
                 Assert.assertEquals(count + 0.0, col_b, 1e-6);
                 Assert.assertEquals("Text_" + count, col_c);
@@ -744,6 +810,7 @@ public class TestHBaseStorage {
     /**
      * Test Load from hbase with parameters lte and gte (01<=key<=98)
      *
+     * @throws IOException
      */
     //@Test
     public void testLoadWithParameters_1() throws IOException {

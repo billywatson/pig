@@ -54,11 +54,6 @@ import org.apache.pig.impl.util.CastUtils;
 import org.apache.pig.impl.util.LogUtils;
 import org.joda.time.DateTime;
 
-/**
- * This is just a cast that converts DataByteArray into either String or
- * Integer. Just added it for testing the POUnion. Need the full operator
- * implementation.
- */
 public class POCast extends ExpressionOperator {
     private final static Log log = LogFactory.getLog(POCast.class);
     private FuncSpec funcSpec = null;

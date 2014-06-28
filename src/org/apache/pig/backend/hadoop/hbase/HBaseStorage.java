@@ -1071,29 +1071,30 @@ public class HBaseStorage extends LoadFunc implements
     public void seekNear(Tuple keys) throws IOException {
         if (keys.size() == 1) {
             Object key = keys.get(0);
+            byte[] keyBytes;
 
-            // @todo - only seek if greater than start row and less than end row
             if (key instanceof byte[])
-                ((TableRecordReader)reader).restart((byte[])key);
+                keyBytes = (byte[])key;
             else if (key instanceof BigDecimal)
-                ((TableRecordReader)reader).restart(Bytes.toBytes((BigDecimal)key));
+                keyBytes = Bytes.toBytes((BigDecimal)key);
             else if (key instanceof Boolean)
-                ((TableRecordReader)reader).restart(Bytes.toBytes(((Boolean)key).booleanValue()));
+                keyBytes = Bytes.toBytes(((Boolean)key).booleanValue());
             else if (key instanceof Double)
-                ((TableRecordReader)reader).restart(Bytes.toBytes(((Double)key).doubleValue()));
+                keyBytes = Bytes.toBytes(((Double)key).doubleValue());
             else if (key instanceof Float)
-                ((TableRecordReader)reader).restart(Bytes.toBytes(((Float)key).floatValue()));
+                keyBytes = Bytes.toBytes(((Float)key).floatValue());
             else if (key instanceof Long)
-                ((TableRecordReader)reader).restart(Bytes.toBytes(((Long)key).longValue()));
+                keyBytes = Bytes.toBytes(((Long)key).longValue());
             else if (key instanceof Short)
-                ((TableRecordReader)reader).restart(Bytes.toBytes(((Short)key).shortValue()));
+                keyBytes = Bytes.toBytes(((Short)key).shortValue());
             else if (key instanceof Integer)
-                ((TableRecordReader)reader).restart(Bytes.toBytes(((Integer)key).intValue()));
+                keyBytes = Bytes.toBytes(((Integer)key).intValue());
             else if (key instanceof String)
-                ((TableRecordReader)reader).restart(Bytes.toBytes((String)key));
+                keyBytes = Bytes.toBytes((String)key);
             else 
                 throw new RuntimeException("Unsupported join key type merge join/group: " + key.getClass().getName());
 
+            ((TableRecordReader)reader).restart(keyBytes);
         } else {
             // @todo - we could allow multiple keys but only use the first one allowing people to
             // use join keys that match, but this would require a seek filter to make sure we start

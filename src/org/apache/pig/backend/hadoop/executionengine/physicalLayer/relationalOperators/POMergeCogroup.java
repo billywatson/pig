@@ -175,6 +175,10 @@ public class POMergeCogroup extends PhysicalOperator {
                     }
                 }
 
+                // Empty input
+                if(prevTopOfHeap == null) 
+                    return baseInp;
+
                 // This is the last output we will produce, if heap is empty
                 // or we got ahead of the first key of the next split.
                 if(heap.isEmpty() || (firstKeyOfNextSplit != null && firstKeyOfNextSplit.compareTo(heap.peek().get(1)) <= 0))

@@ -127,28 +127,28 @@ public class POCollectedGroup extends PhysicalOperator {
     @Override
     public Result getNextTuple() throws ExecException {
 
-        // Since the output is buffered, we need to flush the last
-        // set of records when the close method is called by mapper.
-        if (this.parentPlan.endOfAllInput) {
-            if (outputBag != null) {
-                Tuple tup = mTupleFactory.newTuple(2);
-                tup.set(0, prevKey);
-                tup.set(1, outputBag);
-                outputBag = null;
-                return new Result(POStatus.STATUS_OK, tup);
-            }
-
-            return new Result(POStatus.STATUS_EOP, null);
-        }
-
         Result inp = null;
         Result res = null;
 
         while (true) {
             inp = processInput();
+
             if (inp.returnStatus == POStatus.STATUS_EOP ||
                     inp.returnStatus == POStatus.STATUS_ERR) {
-                break;
+            	// Since the output is buffered, we need to flush the last
+                // set of records when the close method is called by mapper.
+                if (this.parentPlan.endOfAllInput) {
+                    if (outputBag != null) {
+                        Tuple tup = mTupleFactory.newTuple(2);
+                        tup.set(0, prevKey);
+                        tup.set(1, outputBag);
+                        outputBag = null;
+                        return new Result(POStatus.STATUS_OK, tup);
+                    }
+
+                    return new Result(POStatus.STATUS_EOP, null);
+                } else
+                	break;
             }
 
             if (inp.returnStatus == POStatus.STATUS_NULL) {

@@ -688,6 +688,63 @@ public class TestHBaseStorage {
     }
 
     /**
+     * Test collected group after merge join
+     * https://issues.apache.org/jira/browse/PIG-4166
+     * 
+     * @throws IOException
+     */
+    @Test
+    public void testCollectedGroupAfterMergeJoin() throws IOException {
+        prepareTable(TESTTABLE_1, true, DataFormat.HBaseBinary);
+        prepareTable(TESTTABLE_2, true, DataFormat.HBaseBinary);
+        pig.registerQuery("a = load 'hbase://" + TESTTABLE_1 + "' using "
+                        + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                        + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
+        pig.registerQuery("b = load 'hbase://" + TESTTABLE_2 + "' using "
+                        + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                        + TESTCOLUMN_A + " " + TESTCOLUMN_B + " " + TESTCOLUMN_C
+                        + "','-loadKey -caster HBaseBinaryConverter') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
+        pig.registerQuery("c = JOIN a by rowKey, b by rowKey USING 'merge';");
+        pig.registerQuery("e = GROUP c by a::rowKey USING 'collected';");
+        pig.registerQuery("f = ORDER e BY group;");
+
+        // do a merge group
+        Iterator<Tuple> it = pig.openIterator("e");
+        int count = 0;
+        LOG.info("CollectedGroup Starting");
+        while (it.hasNext()) {
+            Tuple t = it.next();
+
+            String rowKey = (String)t.get(0);
+
+            Assert.assertEquals("00".substring((count + "").length()) + count,
+                    rowKey);
+
+            int rowCount = 0;
+            DataBag rows = (DataBag)t.get(1);
+            for (Iterator<Tuple> iter = rows.iterator(); iter.hasNext();) {
+                Tuple row = iter.next();
+
+                // there should be two bags with all 3 columns
+                // int col_a = (Integer) row.get(1);
+                // double col_b = (Double) row.get(2);
+                // String col_c = (String) row.get(3);
+                
+                // Assert.assertEquals(count, col_a);
+                // Assert.assertEquals(count + 0.0, col_b, 1e-6);
+                // Assert.assertEquals("Text_" + count, col_c);
+                rowCount++;
+            }
+            Assert.assertEquals(1, rowCount);
+
+            count++;
+        }
+        Assert.assertEquals(TEST_ROW_COUNT, count);
+        LOG.info("CollectedGroup done");
+    }
+
+    /**
      * Test Load from hbase with parameters lte and gte (01<=key<=98)
      *
      * @throws IOException

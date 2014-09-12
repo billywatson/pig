@@ -16,11 +16,14 @@
  */
 package org.apache.pig.backend.hadoop.hbase;
 
+import java.io.DataInput;
+import java.io.DataOutput;
 import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.UndeclaredThrowableException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -29,11 +32,13 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.Properties;
-
+ 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.OptionBuilder;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.logging.Log;
@@ -50,9 +55,10 @@ import org.apache.hadoop.hbase.filter.CompareFilter.CompareOp;
 import org.apache.hadoop.hbase.filter.FamilyFilter;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.hadoop.hbase.filter.QualifierFilter;
+import org.apache.hadoop.hbase.filter.RegexStringComparator;
 import org.apache.hadoop.hbase.filter.RowFilter;
 import org.apache.hadoop.hbase.filter.WhileMatchFilter;
-import org.apache.hadoop.hbase.filter.QualifierFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.mapreduce.TableInputFormat;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
@@ -164,8 +170,9 @@ public class HBaseStorage extends LoadFunc implements
     private String delimiter_;
     private boolean ignoreWhitespace_;
     private final long limit_;
+    private final boolean cacheBlocks_;
     private final int caching_;
-    private final boolean noWAL_;
+    private boolean noWAL_;
     private final long minTimestamp_;
     private final long maxTimestamp_;
     private final long timestamp_;
@@ -175,29 +182,33 @@ public class HBaseStorage extends LoadFunc implements
     protected transient byte[] lt_;
     protected transient byte[] lte_;
 
+    private String regex_;
     private LoadCaster caster_;
 
     private ResourceSchema schema_;
     private RequiredFieldList requiredFieldList;
 
     private static void populateValidOptions() {
-        validOptions_.addOption("loadKey", false, "Load Key");
+        Option loadKey = OptionBuilder.hasOptionalArgs(1).withArgName("loadKey").withLongOpt("loadKey").withDescription("Load Key").create();
+        validOptions_.addOption(loadKey);
         validOptions_.addOption("gt", true, "Records must be greater than this value " +
                 "(binary, double-slash-escaped)");
         validOptions_.addOption("lt", true, "Records must be less than this value (binary, double-slash-escaped)");
         validOptions_.addOption("gte", true, "Records must be greater than or equal to this value");
         validOptions_.addOption("lte", true, "Records must be less than or equal to this value");
+        validOptions_.addOption("regex", true, "Record must match this regular expression");
+        validOptions_.addOption("cacheBlocks", true, "Set whether blocks should be cached for the scan");
         validOptions_.addOption("caching", true, "Number of rows scanners should cache");
         validOptions_.addOption("limit", true, "Per-region limit");
         validOptions_.addOption("delim", true, "Column delimiter");
         validOptions_.addOption("ignoreWhitespace", true, "Ignore spaces when parsing columns");
         validOptions_.addOption("caster", true, "Caster to use for converting values. A class name, " +
                 "HBaseBinaryConverter, or Utf8StorageConverter. For storage, casters must implement LoadStoreCaster.");
-        validOptions_.addOption("noWAL", false, "Sets the write ahead to false for faster loading. To be used with extreme caution since this could result in data loss (see http://hbase.apache.org/book.html#perf.hbase.client.putwal).");
+        Option noWal = OptionBuilder.hasOptionalArgs(1).withArgName("noWAL").withLongOpt("noWAL").withDescription("Sets the write ahead to false for faster loading. To be used with extreme caution since this could result in data loss (see http://hbase.apache.org/book.html#perf.hbase.client.putwal).").create();
+        validOptions_.addOption(noWal);
         validOptions_.addOption("minTimestamp", true, "Record must have timestamp greater or equal to this value");
         validOptions_.addOption("maxTimestamp", true, "Record must have timestamp less then this value");
         validOptions_.addOption("timestamp", true, "Record must have timestamp equal to this value");
-
     }
 
     /**
@@ -231,9 +242,11 @@ public class HBaseStorage extends LoadFunc implements
      * <li>-lt=maxKeyVal
      * <li>-gte=minKeyVal
      * <li>-lte=maxKeyVal
+     * <li>-regex=match regex on KeyVal
      * <li>-limit=numRowsPerRegion max number of rows to retrieve per region
      * <li>-delim=char delimiter to use when parsing column names (default is space or comma)
      * <li>-ignoreWhitespace=(true|false) ignore spaces when parsing column names (default true)
+     * <li>-cacheBlocks=(true|false) Set whether blocks should be cached for the scan (default false).
      * <li>-caching=numRows  number of rows to cache (faster scans, more memory).
      * <li>-noWAL=(true|false) Sets the write ahead to false for faster loading.
      * <li>-minTimestamp= Scan's timestamp for min timeRange
@@ -253,17 +266,23 @@ public class HBaseStorage extends LoadFunc implements
             configuredOptions_ = parser_.parse(validOptions_, optsArr);
         } catch (ParseException e) {
             HelpFormatter formatter = new HelpFormatter();
-            formatter.printHelp( "[-loadKey] [-gt] [-gte] [-lt] [-lte] [-columnPrefix] [-caching] [-caster] [-noWAL] [-limit] [-delim] [-ignoreWhitespace] [-minTimestamp] [-maxTimestamp] [-timestamp]", validOptions_ );
+            formatter.printHelp( "[-loadKey] [-gt] [-gte] [-lt] [-lte] [-regex] [-columnPrefix] [-cacheBlocks] [-caching] [-caster] [-noWAL] [-limit] [-delim] [-ignoreWhitespace] [-minTimestamp] [-maxTimestamp] [-timestamp]", validOptions_ );
             throw e;
         }
-
-        loadRowKey_ = configuredOptions_.hasOption("loadKey");
-
+    
+        loadRowKey_ = false;
+        if (configuredOptions_.hasOption("loadKey")) {
+            String value = configuredOptions_.getOptionValue("loadKey");
+            if ("true".equalsIgnoreCase(value) || "".equalsIgnoreCase(value) || value == null ) {//the empty string and null check is for backward compat.
+                loadRowKey_ = true;
+            }
+        }
+    
         delimiter_ = ",";
         if (configuredOptions_.getOptionValue("delim") != null) {
           delimiter_ = configuredOptions_.getOptionValue("delim");
         }
-
+    
         ignoreWhitespace_ = true;
         if (configuredOptions_.hasOption("ignoreWhitespace")) {
           String value = configuredOptions_.getOptionValue("ignoreWhitespace");
@@ -271,9 +290,9 @@ public class HBaseStorage extends LoadFunc implements
             ignoreWhitespace_ = false;
           }
         }
-
+    
         columnInfo_ = parseColumnList(columnList, delimiter_, ignoreWhitespace_);
-
+    
         String defaultCaster = UDFContext.getUDFContext().getClientSystemProps().getProperty(CASTER_PROPERTY, STRING_CASTER);
         String casterOption = configuredOptions_.getOptionValue("caster", defaultCaster);
         if (STRING_CASTER.equalsIgnoreCase(casterOption)) {
@@ -292,29 +311,36 @@ public class HBaseStorage extends LoadFunc implements
             }
         }
         LOG.debug("Using caster " + caster_.getClass());
-
+    
         caching_ = Integer.valueOf(configuredOptions_.getOptionValue("caching", "100"));
+        cacheBlocks_ = Boolean.valueOf(configuredOptions_.getOptionValue("cacheBlocks", "false"));
         limit_ = Long.valueOf(configuredOptions_.getOptionValue("limit", "-1"));
-        noWAL_ = configuredOptions_.hasOption("noWAL");
-
+        noWAL_ = false;
+        if (configuredOptions_.hasOption("noWAL")) {
+            String value = configuredOptions_.getOptionValue("noWAL");
+            if ("true".equalsIgnoreCase(value) || "".equalsIgnoreCase(value) || value == null) {//the empty string and null check is for backward compat.
+                noWAL_ = true;
+            }
+        }        
+    
         if (configuredOptions_.hasOption("minTimestamp")){
             minTimestamp_ = Long.parseLong(configuredOptions_.getOptionValue("minTimestamp"));
         } else {
             minTimestamp_ = 0;
         }
-
+    
         if (configuredOptions_.hasOption("maxTimestamp")){
             maxTimestamp_ = Long.parseLong(configuredOptions_.getOptionValue("maxTimestamp"));
         } else {
             maxTimestamp_ = Long.MAX_VALUE;
         }
-
+    
         if (configuredOptions_.hasOption("timestamp")){
             timestamp_ = Long.parseLong(configuredOptions_.getOptionValue("timestamp"));
         } else {
             timestamp_ = 0;
         }
-
+    
         initScan();
     }
 
@@ -373,11 +399,10 @@ public class HBaseStorage extends LoadFunc implements
 
     private void initScan() throws IOException{
         scan = new Scan();
-
-        // Map-reduce jobs should not run with cacheBlocks
-        scan.setCacheBlocks(false);
+    
+        scan.setCacheBlocks(cacheBlocks_);
         scan.setCaching(caching_);
-
+    
         // Set filters, if any.
         if (configuredOptions_.hasOption("gt")) {
             gt_ = Bytes.toBytesBinary(Utils.slashisize(configuredOptions_.getOptionValue("gt")));
@@ -400,14 +425,18 @@ public class HBaseStorage extends LoadFunc implements
                 LOG.debug(String.format("Incrementing lte value of %s from bytes %s to %s to set stop row",
                           Bytes.toString(lte_), toString(lte_), toString(lt)));
             }
-
+    
             if (lt != null) {
                 scan.setStopRow(increment(lte_));
             }
-
+    
             // The WhileMatchFilter will short-circuit the scan after we no longer match. The
             // setStopRow call will limit the number of regions we need to scan
             addFilter(new WhileMatchFilter(new RowFilter(CompareOp.LESS_OR_EQUAL, new BinaryComparator(lte_))));
+        }
+        if (configuredOptions_.hasOption("regex")) {
+            regex_ = Utils.slashisize(configuredOptions_.getOptionValue("regex"));
+            addFilter(new RowFilter(CompareOp.EQUAL, new RegexStringComparator(regex_)));
         }
         if (configuredOptions_.hasOption("minTimestamp") || configuredOptions_.hasOption("maxTimestamp")){
             scan.setTimeRange(minTimestamp_, maxTimestamp_);
@@ -415,7 +444,7 @@ public class HBaseStorage extends LoadFunc implements
         if (configuredOptions_.hasOption("timestamp")){
             scan.setTimeStamp(timestamp_);
         }
-
+    
         // if the group of columnInfos for this family doesn't contain a prefix, we don't need
         // to set any filters, we can just call addColumn or addFamily. See javadocs below.
         boolean columnPrefixExists = false;
@@ -425,7 +454,7 @@ public class HBaseStorage extends LoadFunc implements
                 break;
             }
         }
-
+    
         if (!columnPrefixExists) {
             addFiltersWithoutColumnPrefix(columnInfo_);
         }
@@ -694,7 +723,7 @@ public class HBaseStorage extends LoadFunc implements
         Properties udfProps = getUDFProperties();
         job.getConfiguration().setBoolean("pig.noSplitCombination", true);
 
-        initialiseHBaseClassLoaderResources(job);
+        initializeHBaseClassLoaderResources(job);
         m_conf = initializeLocalJobConfig(job);
         String delegationTokenSet = udfProps.getProperty(HBASE_TOKEN_SET);
         if (delegationTokenSet == null) {
@@ -723,15 +752,52 @@ public class HBaseStorage extends LoadFunc implements
         }
     }
 
-    private void initialiseHBaseClassLoaderResources(Job job) throws IOException {
+    private void initializeHBaseClassLoaderResources(Job job) throws IOException {
+        // Depend on HBase to do the right thing when available, as of HBASE-9165
+        try {
+            Method addHBaseDependencyJars =
+              TableMapReduceUtil.class.getMethod("addHBaseDependencyJars", Configuration.class);
+            if (addHBaseDependencyJars != null) {
+                addHBaseDependencyJars.invoke(null, job.getConfiguration());
+                return;
+            }
+        } catch (NoSuchMethodException e) {
+            LOG.debug("TableMapReduceUtils#addHBaseDependencyJars not available."
+              + " Falling back to previous logic.", e);
+        } catch (IllegalAccessException e) {
+            LOG.debug("TableMapReduceUtils#addHBaseDependencyJars invocation"
+              + " not permitted. Falling back to previous logic.", e);
+        } catch (InvocationTargetException e) {
+            LOG.debug("TableMapReduceUtils#addHBaseDependencyJars invocation"
+              + " failed. Falling back to previous logic.", e);
+        }
+        // fall back to manual class handling.
         // Make sure the HBase, ZooKeeper, and Guava jars get shipped.
         TableMapReduceUtil.addDependencyJars(job.getConfiguration(),
-            org.apache.hadoop.hbase.client.HTable.class,
-            com.google.common.collect.Lists.class,
-            org.apache.zookeeper.ZooKeeper.class);
-
+            org.apache.hadoop.hbase.client.HTable.class, // main hbase jar or hbase-client
+            org.apache.hadoop.hbase.mapreduce.TableSplit.class, // main hbase jar or hbase-server
+            com.google.common.collect.Lists.class, // guava
+            org.apache.zookeeper.ZooKeeper.class); // zookeeper
+        // Additional jars that are specific to v0.95.0+
+        addClassToJobIfExists(job, "org.cloudera.htrace.Trace"); // htrace
+        addClassToJobIfExists(job, "org.apache.hadoop.hbase.protobuf.generated.HBaseProtos"); // hbase-protocol
+        addClassToJobIfExists(job, "org.apache.hadoop.hbase.TableName"); // hbase-common
+        addClassToJobIfExists(job, "org.apache.hadoop.hbase.CompatibilityFactory"); // hbase-hadoop-compar
+        addClassToJobIfExists(job, "org.jboss.netty.channel.ChannelFactory"); // netty
     }
 
+    private void addClassToJobIfExists(Job job, String className) throws IOException {
+      Class klass = null;
+      try {
+          klass = Class.forName(className);
+      } catch (ClassNotFoundException e) {
+          LOG.debug("Skipping adding jar for class: " + className);
+          return;
+      }
+    
+      TableMapReduceUtil.addDependencyJars(job.getConfiguration(), klass);
+    }
+    
     private JobConf initializeLocalJobConfig(Job job) {
         Properties udfProps = getUDFProperties();
         Configuration jobConf = job.getConfiguration();
@@ -969,7 +1035,7 @@ public class HBaseStorage extends LoadFunc implements
             schema_ = (ResourceSchema) ObjectSerializer.deserialize(serializedSchema);
         }
 
-        initialiseHBaseClassLoaderResources(job);
+        initializeHBaseClassLoaderResources(job);
         m_conf = initializeLocalJobConfig(job);
         // Not setting a udf property and getting the hbase delegation token
         // only once like in setLocation as setStoreLocation gets different Job

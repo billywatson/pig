@@ -80,8 +80,7 @@ public class TestHBaseStorage {
     @BeforeClass
     public static void setUp() throws Exception {
         // This is needed by Pig
-        cluster = MiniCluster.buildCluster();
-        conf = HBaseConfiguration.create(cluster.getConfiguration());
+        conf = HBaseConfiguration.create(new Configuration());
 
         util = new HBaseTestingUtility(conf);
         util.startMiniZKCluster();
@@ -98,7 +97,6 @@ public class TestHBaseStorage {
             hbc.join();
         }
         util.shutdownMiniZKCluster();
-        cluster.shutDown();
     }
 
 
@@ -148,7 +146,7 @@ public class TestHBaseStorage {
                 + " "
                 + TESTCOLUMN_C
                 + " pig:"
-                + "','-loadKey') as (rowKey, col_a, col_b, col_c, pig_cf_map);");
+                + "','-loadKey -cacheBlocks true') as (rowKey, col_a, col_b, col_c, pig_cf_map);");
         Iterator<Tuple> it = pig.openIterator("a");
         int count = 0;
         LOG.info("LoadFromHBase Starting");
@@ -922,7 +920,91 @@ public class TestHBaseStorage {
         LOG.info("LoadFromHBaseWithParameters_3 Starting");
     }
 
-
+    /**
+     * Test Load from hbase with parameters regex [2-3][4-5]
+     *
+     */
+    @Test
+    public void testLoadWithParameters_4() throws IOException {
+        prepareTable(TESTTABLE_1, true, DataFormat.UTF8PlainText);
+    
+        pig.registerQuery("a = load 'hbase://"
+                + TESTTABLE_1
+                + "' using "
+                + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                + TESTCOLUMN_A
+                + " "
+                + TESTCOLUMN_B
+                + " "
+                + TESTCOLUMN_C
+                + "','-loadKey -regex [2-3][4-5]') as (rowKey,col_a, col_b, col_c);");
+        Iterator<Tuple> it = pig.openIterator("a");
+    
+        int[] expectedValues = {24, 25, 34, 35};
+        int count = 0;
+        int countExpected = 4;
+        LOG.info("LoadFromHBaseWithParameters_4 Starting");
+        while (it.hasNext()) {
+            Tuple t = it.next();
+            LOG.info("LoadFromHBase " + t);
+            String rowKey = ((DataByteArray) t.get(0)).toString();
+            String col_a = ((DataByteArray) t.get(1)).toString();
+            String col_b = ((DataByteArray) t.get(2)).toString();
+            String col_c = ((DataByteArray) t.get(3)).toString();
+    
+            Assert.assertEquals(expectedValues[count] + "", rowKey);
+            Assert.assertEquals(expectedValues[count], Integer.parseInt(col_a));
+            Assert.assertEquals((double) expectedValues[count], Double.parseDouble(col_b), 1e-6);
+            Assert.assertEquals("Text_" + expectedValues[count], col_c);
+    
+            count++;
+        }
+        Assert.assertEquals(countExpected, count);
+        LOG.info("LoadFromHBaseWithParameters_4 done");
+    }
+    
+    /**
+     * Test Load from hbase with parameters lt and gt (10&lt;key&lt;30) and regex \\d[5]
+     */
+    @Test
+    public void testLoadWithParameters_5() throws IOException {
+        prepareTable(TESTTABLE_1, true, DataFormat.UTF8PlainText);
+    
+        pig.registerQuery("a = load 'hbase://"
+                + TESTTABLE_1
+                + "' using "
+                + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                + TESTCOLUMN_A
+                + " "
+                + TESTCOLUMN_B
+                + " "
+                + TESTCOLUMN_C
+                + "','-loadKey -gt 10 -lt 30 -regex \\\\d[5]') as (rowKey,col_a, col_b, col_c);");
+        Iterator<Tuple> it = pig.openIterator("a");
+    
+        int[] expectedValues = {15, 25};
+        int count = 0;
+        int countExpected = 2;
+        LOG.info("LoadFromHBaseWithParameters_5 Starting");
+        while (it.hasNext()) {
+            Tuple t = it.next();
+            LOG.info("LoadFromHBase " + t);
+            String rowKey = ((DataByteArray) t.get(0)).toString();
+            String col_a = ((DataByteArray) t.get(1)).toString();
+            String col_b = ((DataByteArray) t.get(2)).toString();
+            String col_c = ((DataByteArray) t.get(3)).toString();
+    
+            Assert.assertEquals(expectedValues[count] + "", rowKey);
+            Assert.assertEquals(expectedValues[count], Integer.parseInt(col_a));
+            Assert.assertEquals((double) expectedValues[count], Double.parseDouble(col_b), 1e-6);
+            Assert.assertEquals("Text_" + expectedValues[count], col_c);
+    
+            count++;
+        }
+        Assert.assertEquals(countExpected, count);
+        LOG.info("LoadFromHBaseWithParameters_5 done");
+    }
+    
     /**
      * Test Load from hbase with projection.
      */

@@ -139,7 +139,7 @@ import com.google.common.collect.Lists;
  *
  */
 public class HBaseStorage extends LoadFunc implements 
-    StoreFuncInterface, LoadPushDown, OrderedLoadFunc, IndexableLoadFunc, CollectableLoadFunc {
+    StoreFuncInterface, LoadPushDown, OrderedLoadFunc, /* IndexableLoadFunc,*/ CollectableLoadFunc {
 
     private static final Log LOG = LogFactory.getLog(HBaseStorage.class);
 
@@ -1124,54 +1124,53 @@ public class HBaseStorage extends LoadFunc implements
      * There is something wrong with this implementation so
      * IndexableLoadFunc has been disabled
      */
-    public void initialize(Configuration conf) throws IOException {
-        HBaseTableInputFormat inputFormat = (HBaseTableInputFormat)getInputFormat();
-        reader = inputFormat.createRecordReader();
-        ((TableRecordReader)reader).restart(scan.getStartRow());
-    }
+//    public void initialize(Configuration conf) throws IOException {
+//        HBaseTableInputFormat inputFormat = (HBaseTableInputFormat)getInputFormat();
+//        reader = inputFormat.createRecordReader();
+//        ((TableRecordReader)reader).restart(scan.getStartRow());
+//    }
 
     /**
-      * IndexableLoadFunc is only supported for joins/groups on the row key.
-      * If you pass another column the output will not be correct.
+      * IndexableLoadFunc is only supported for joins/groups sorted on the row key.
       */
-    public void seekNear(Tuple keys) throws IOException {
-        if (keys.size() == 1) {
-            Object key = keys.get(0);
-            byte[] keyBytes;
-
-            if (key instanceof byte[])
-                keyBytes = (byte[])key;
-            else if (key instanceof BigDecimal)
-                keyBytes = Bytes.toBytes((BigDecimal)key);
-            else if (key instanceof Boolean)
-                keyBytes = Bytes.toBytes(((Boolean)key).booleanValue());
-            else if (key instanceof Double)
-                keyBytes = Bytes.toBytes(((Double)key).doubleValue());
-            else if (key instanceof Float)
-                keyBytes = Bytes.toBytes(((Float)key).floatValue());
-            else if (key instanceof Long)
-                keyBytes = Bytes.toBytes(((Long)key).longValue());
-            else if (key instanceof Short)
-                keyBytes = Bytes.toBytes(((Short)key).shortValue());
-            else if (key instanceof Integer)
-                keyBytes = Bytes.toBytes(((Integer)key).intValue());
-            else if (key instanceof String)
-                keyBytes = Bytes.toBytes((String)key);
-            else 
-                throw new RuntimeException("Unsupported join key type merge join/group: " + key.getClass().getName());
-
-            if (new BinaryComparator(keyBytes).compareTo(scan.getStopRow()) > 0)
-                ((TableRecordReader)reader).restart(scan.getStopRow());
-            else if (new BinaryComparator(keyBytes).compareTo(scan.getStartRow()) > 0)
-                ((TableRecordReader)reader).restart(keyBytes);
-
-        } else {
-            // @todo - we could allow multiple keys but only use the first one allowing people to
-            // use join keys that match, but this would require a seek filter to make sure we start
-            // at the correct row for the other columns
-            throw new RuntimeException("Currently only the row key is supported for merge joins/groups, but " + keys.size() + " keys were supplied.");
-        }
-    }
+//    public void seekNear(Tuple keys) throws IOException {
+//        if (keys.size() == 1) {
+//            Object key = keys.get(0);
+//            byte[] keyBytes;
+//
+//            if (key instanceof byte[])
+//                keyBytes = (byte[])key;
+//            else if (key instanceof BigDecimal)
+//                keyBytes = Bytes.toBytes((BigDecimal)key);
+//            else if (key instanceof Boolean)
+//                keyBytes = Bytes.toBytes(((Boolean)key).booleanValue());
+//            else if (key instanceof Double)
+//                keyBytes = Bytes.toBytes(((Double)key).doubleValue());
+//            else if (key instanceof Float)
+//                keyBytes = Bytes.toBytes(((Float)key).floatValue());
+//            else if (key instanceof Long)
+//                keyBytes = Bytes.toBytes(((Long)key).longValue());
+//            else if (key instanceof Short)
+//                keyBytes = Bytes.toBytes(((Short)key).shortValue());
+//            else if (key instanceof Integer)
+//                keyBytes = Bytes.toBytes(((Integer)key).intValue());
+//            else if (key instanceof String)
+//                keyBytes = Bytes.toBytes((String)key);
+//            else 
+//                throw new RuntimeException("Unsupported join key type merge join/group: " + key.getClass().getName());
+//
+//            if (new BinaryComparator(keyBytes).compareTo(scan.getStopRow()) > 0)
+//                ((TableRecordReader)reader).restart(scan.getStopRow());
+//            else if (new BinaryComparator(keyBytes).compareTo(scan.getStartRow()) > 0)
+//                ((TableRecordReader)reader).restart(keyBytes);
+//
+//        } else {
+//            // @todo - we could allow multiple keys but only use the first one allowing people to
+//            // use join keys that match, but this would require a seek filter to make sure we start
+//            // at the correct row for the other columns
+//            throw new RuntimeException("Currently only the row key is supported for merge joins/groups, but " + keys.size() + " keys were supplied.");
+//        }
+//    }
 
     public void close() throws IOException {
         reader.close();

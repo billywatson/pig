@@ -33,7 +33,17 @@ public class PigConfiguration {
      * Controls the fraction of total memory that is allowed to be used by
      * cached bags. Default is 0.2.
      */
-    public static final String PROP_CACHEDBAG_MEMUSAGE = "pig.cachedbag.memusage";
+    public static final String PIG_CACHEDBAG_MEMUSAGE = "pig.cachedbag.memusage";
+    
+    /**
+     * Configurations for specifying alternate implementations for cached bags
+     */
+    public static final String PIG_CACHEDBAG_TYPE = "pig.cachedbag.type";
+    public static final String PIG_CACHEDBAG_DISTINCT_TYPE = "pig.cachedbag.distinct.type";
+    public static final String PIG_CACHEDBAG_SORT_TYPE = "pig.cachedbag.sort.type";
+
+
+    public static final String ACCUMULATIVE_BATCHSIZE = "pig.accumulative.batchsize";
 
     /**
      * Controls whether partial aggregation is turned on
@@ -51,7 +61,8 @@ public class PigConfiguration {
      * Controls whether execution time of Pig UDFs should be tracked.
      * This feature uses counters; use judiciously.
      */
-    public static final String TIME_UDFS_PROP = "pig.udf.profile";
+    public static final String TIME_UDFS = "pig.udf.profile";
+    public static final String TIME_UDFS_FREQUENCY = "pig.udf.profile.frequency";
 
     /**
      * This key must be set to true by the user for code generation to be used.
@@ -70,7 +81,38 @@ public class PigConfiguration {
 
     public static final String SCHEMA_TUPLE_SHOULD_ALLOW_FORCE = "pig.schematuple.force";
 
-    /*
+    /**
+     * This key is used to enable multiquery optimization.
+     */
+    public static final String OPT_MULTIQUERY = "opt.multiquery";
+
+    /**
+     * This key is used to enable accumulator optimization.
+     */
+    public static final String OPT_ACCUMULATOR = "opt.accumulator";
+
+
+    /**
+     * This key is used to configure auto parallelism in tez. Default is true.
+     */
+    public static final String TEZ_AUTO_PARALLELISM = "pig.tez.auto.parallelism";
+
+    /**
+     * This key is used to enable union optimization.
+     */
+    public static final String TEZ_OPT_UNION = "pig.tez.opt.union";
+
+    /**
+     * This key is used to define whether to reuse AM in Tez jobs.
+     */
+    public static final String TEZ_SESSION_REUSE = "pig.tez.session.reuse";
+
+    /**
+     * This key is used to configure the interval of dag status report in seconds.
+     */
+    public static final String TEZ_DAG_STATUS_REPORT_INTERVAL = "pig.tez.dag.status.report.interval";
+
+    /**
      * Turns off use of combiners in MapReduce jobs produced by Pig.
      */
     public static final String PROP_NO_COMBINER = "pig.exec.nocombiner";
@@ -81,13 +123,19 @@ public class PigConfiguration {
      * will be set in the environment.
      */
     public static final String PIG_STREAMING_ENVIRONMENT = "pig.streaming.environment";
-    
+
+    /**
+     * This key can be used to configure the python command for python streaming
+     * udf. For eg, python2.7.
+     */
+    public static final String PIG_STREAMING_UDF_PYTHON_COMMAND = "pig.streaming.udf.python.command";
+
     /**
      * This key is used to define the default load func. Pig will fallback on PigStorage
      * as default in case this is undefined.
      */
     public static final String PIG_DEFAULT_LOAD_FUNC = "pig.default.load.func";
-    
+
     /**
      * This key is used to define the default store func. Pig will fallback on PigStorage
      * as default in case this is undefined.
@@ -99,6 +147,16 @@ public class PigConfiguration {
      * application master getting restarted.
      */
     public static final String PIG_OUTPUT_COMMITTER_RECOVERY = "pig.output.committer.recovery.support";
+
+    /**
+     * This key is used to turn off the inclusion of settings in the jobs.
+     */
+    public static final String INSERT_ENABLED = "pig.script.info.enabled";
+
+    /**
+     * Controls the size of Pig script stored in job xml.
+     */
+    public static final String MAX_SCRIPT_SIZE = "pig.script.max.size";
 
     /**
      * This key is used to define whether to have intermediate file compressed
@@ -119,8 +177,116 @@ public class PigConfiguration {
     public static final String PIG_TEMP_FILE_COMPRESSION_CODEC = "pig.tmpfilecompression.codec";
 
     /**
+     * This key is used to define whether to delete intermediate files of Hadoop jobs.
+     */
+    public static final String PIG_DELETE_TEMP_FILE = "pig.delete.temp.files";
+
+    /**
+     * For a given mean and a confidence, a sample rate is obtained from a poisson udf
+     */
+    public static final String SAMPLE_RATE = "pig.sksampler.samplerate";
+
+    /**
+     * % of memory available for the input data. This is currently equal to the
+     * memory available for the skewed join
+     */
+    public static final String PERC_MEM_AVAIL = "pig.skewedjoin.reduce.memusage";
+
+    /**
      * This key used to control the maximum size loaded into
      * the distributed cache when doing fragment-replicated join
      */
     public static final String PIG_JOIN_REPLICATED_MAX_BYTES = "pig.join.replicated.max.bytes";
+
+    /**
+     * Turns combine split files on or off
+     */
+    public static final String PIG_SPLIT_COMBINATION = "pig.splitCombination";
+
+    /**
+     * Whether turns combine split files off. This is for internal use only
+     */
+    public static final String PIG_NO_SPLIT_COMBINATION = "pig.noSplitCombination";
+
+    /**
+     * Specifies the size, in bytes, of data to be processed by a single map.
+     * Smaller files are combined untill this size is reached.
+     */
+    public static final String PIG_MAX_COMBINED_SPLIT_SIZE = "pig.maxCombinedSplitSize";
+
+    /**
+     * This key controls whether secondary sort key is used for optimization in case
+     * of nested distinct or sort
+     */
+    public static final String PIG_EXEC_NO_SECONDARY_KEY = "pig.exec.nosecondarykey";
+
+    /**
+     * This key used to control the sample size of RandomeSampleLoader for
+     * order-by. The default value is 100 rows per task.
+     */
+    public static final String PIG_RANDOM_SAMPLER_SAMPLE_SIZE = "pig.random.sampler.sample.size";
+
+    /**
+     * This key is to turn on auto local mode feature
+     */
+    public static final String PIG_AUTO_LOCAL_ENABLED = "pig.auto.local.enabled";
+
+    /**
+     * Controls the max threshold size to convert jobs to run in local mode
+     */
+    public static final String PIG_AUTO_LOCAL_INPUT_MAXBYTES = "pig.auto.local.input.maxbytes";
+
+    /**
+     * This parameter enables/disables fetching. By default it is turned on.
+     */
+    public static final String OPT_FETCH = "opt.fetch";
+
+    /**
+     * This key is used to define whether PigOutputFormat will be wrapped with LazyOutputFormat
+     * so that jobs won't write empty part files if no output is generated
+     */
+    public static final String PIG_OUTPUT_LAZY = "pig.output.lazy";
+
+    /**
+     * Location where pig stores temporary files for job setup
+     */
+    public static final String PIG_TEMP_DIR = "pig.temp.dir";
+
+    /**
+     * This key is turn on the user level cache
+     */
+    public static final String PIG_USER_CACHE_ENABLED = "pig.user.cache.enabled";
+
+    /**
+     * Location where additional jars are cached for the user
+     * Additional jar will be cached under PIG_USER_CACHE_LOCATION/${user.name}/.pigcache
+     * and will be re-used across the jobs run by the user if the jar has not changed
+     */
+    public static final String PIG_USER_CACHE_LOCATION = "pig.user.cache.location";
+
+    /**
+     * Comma-delimited entries of commands/operators that must be disallowed.
+     * This is a security feature to be used by administrators to block use of
+     * commands by users. For eg, an admin might like to block all filesystem
+     * commands and setting configs in pig script. In which case, the entry
+     * would be "pig.blacklist=fs,set"
+     */
+    public static final String PIG_BLACKLIST = "pig.blacklist";
+
+    /**
+     * Comma-delimited entries of commands/operators that must be allowed. This
+     * is a security feature to be used by administrators to block use of
+     * commands by users that are not a part of the whitelist. For eg, an admin
+     * might like to allow only LOAD, STORE, FILTER, GROUP in pig script. In
+     * which case, the entry would be "pig.whitelist=load,store,filter,group"
+     */
+    public static final String PIG_WHITELIST = "pig.whitelist";
+
+    /**
+     * This key is used to turns off use of task reports in job statistics.
+     */
+    public static final String PIG_NO_TASK_REPORT = "pig.stats.notaskreport";
+
+    public static final String REDUCER_ESTIMATOR_KEY = "pig.exec.reducer.estimator";
+    public static final String REDUCER_ESTIMATOR_ARG_KEY =  "pig.exec.reducer.estimator.arg";
 }

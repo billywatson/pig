@@ -32,10 +32,10 @@
     <property name="pigunit.pom" value="${basedir}/ivy/pigunit.pom" />
     <property name="piggybank.pom" value="${basedir}/ivy/piggybank.pom" />
     <property name="pig.version" value="0.15.1" />
-    <property name="pig.version.suffix" value="-SNAPSHOT" />
+    <property name="pig.version.suffix" value="-KORRELATE" />
     <property name="version" value="${pig.version}${pig.version.suffix}" />
     <property name="final.name" value="${name}-${version}" />
-    <property name="year" value="2007-2012" />
+    <property name="year" value="2007-2015" />
 
     <!-- source properties -->
     <property name="lib.dir" value="${basedir}/lib" />
@@ -153,7 +153,7 @@
         <propertyreset name="test.timeout" value="900000" />
         <propertyreset name="hadoopversion" value="23" />
         <propertyreset name="isHadoop23" value="true" />
-        <propertyreset name="hbase.hadoop.version" value="hadoop2" />
+        <propertyreset name="hbase.hadoop.version" value="hadoop" />
         <propertyreset name="src.shims.dir" value="${basedir}/shims/src/hadoop${hadoopversion}" />
         <propertyreset name="src.shims.test.dir" value="${basedir}/shims/test/hadoop${hadoopversion}" />
         <propertyreset name="src.exclude.dir" value="" />

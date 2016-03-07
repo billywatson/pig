@@ -344,6 +344,12 @@
       <exclude org="com.google.protobuf" module="protobuf-java"/>
     </dependency>
 
+    <dependency org="org.apache.hbase" name="hbase-procedure" rev="${hbase-procedure.version}" conf="hbase95->master">
+      <artifact name="hbase-procedure" type="jar"/>
+      <artifact name="hbase-procedure" type="test-jar" ext="jar" m:classifier="tests"/>
+      <exclude org="com.google.protobuf" module="protobuf-java"/>
+    </dependency>
+
     <dependency org="org.apache.hbase" name="hbase-hadoop-compat" rev="${hbase95.version}" conf="hbase95->master">
       <artifact name="hbase-hadoop-compat" type="jar"/>
       <artifact name="hbase-hadoop-compat" type="test-jar" ext="jar" m:classifier="tests"/>

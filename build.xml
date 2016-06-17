@@ -925,7 +925,7 @@
                 <pathelement path="${clover.jar}"/>
                 <path refid="test.classpath"/>
             </classpath>
-            <formatter type="${test.junit.output.format}" />
+            <formatter type="${test.junit.output.format}" usefile="false" />
 
             <batchtest fork="yes" todir="${test.log.dir}" unless="testcase">
                 <fileset dir="test">

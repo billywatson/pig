@@ -316,7 +316,7 @@ public class TestHBaseStorage {
      */
     @Test
     public void testLoadAllColumnsIntoSingleMap() throws IOException {
-        prepareTableWithMultipleColumnFamilies(TESTTABLE_3, null);
+        prepareTableWithMultipleColumnFamilies(TESTTABLE_3);
 
         pig.registerQuery("a = load 'hbase://"
                 + TESTTABLE_3
@@ -1547,18 +1547,16 @@ public class TestHBaseStorage {
                 + " " + extraParams + " "
                 + "') as (rowKey:chararray,col_a:int, col_b:double, col_c:chararray);");
     }
-
+    
     private HTable prepareTable(String tableName, boolean initData,
-            DataFormat format) throws IOException {
+                                DataFormat format) throws IOException {
         return prepareTable(tableName, initData, format, TableType.ONE_CF);
     }
-    private HTable prepareTableWithMultipleColumnFamilies(String tableName, byte[][] families ) throws IOException  {
-      if (families == null) {
-        // init here
-        families = new byte[2][];
-        families[0] = COLUMNFAMILY;
-        families[1] = COLUMNFAMILY2;
-      } 
+
+    private HTable prepareTableWithMultipleColumnFamilies(String tableName) throws IOException  {
+      byte[][] families = new byte[2][];
+      families[0] = COLUMNFAMILY;
+      families[1] = COLUMNFAMILY2;
 
       // define the table schema
       HTable table = null;

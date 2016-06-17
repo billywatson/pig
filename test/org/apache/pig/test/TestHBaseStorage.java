@@ -70,6 +70,7 @@ public class TestHBaseStorage {
     // Test Table constants
     private static final String TESTTABLE_1 = "pigtable_1";
     private static final String TESTTABLE_2 = "pigtable_2";
+    private static final String TESTTABLE_3 = "pigtable_3";
     private static final byte[] COLUMNFAMILY = Bytes.toBytes("pig");
     private static final byte[] COLUMNFAMILY2 = Bytes.toBytes("pig2");
     private static final String TESTCOLUMN_A = "pig:col_a";
@@ -309,6 +310,35 @@ public class TestHBaseStorage {
         }
         Assert.assertEquals(TEST_ROW_COUNT, count);
         LOG.info("LoadFromHBase done");
+    }
+
+    /**
+     * Test Load from hbase with map parameters and all columns
+     *
+     */
+    @Test
+    public void testLoadAllColumnsIntoSingleMap() throws IOException {
+        prepareTableWithMultipleColumnFamilies(TESTTABLE_3);
+
+        pig.registerQuery("a = load 'hbase://"
+                + TESTTABLE_3
+                + "' using "
+                + "org.apache.pig.backend.hadoop.hbase.HBaseStorage('"
+                + "*"
+                + "') as (data:map[]);");
+        Iterator<Tuple> it = pig.openIterator("a");
+
+        LOG.info("LoadFromHBase Starting");
+        while (it.hasNext()) {
+            Tuple t = it.next();
+            LOG.info("LoadFromHBase " + t);
+
+            Assert.assertEquals(1, t.size()); // a single map "column"
+
+            Map row = (Map) t.get(0);
+            Assert.assertEquals("abc", row.get("col_a").toString());
+            Assert.assertEquals("abc", row.get("col_b").toString());
+        }
     }
 
     /**
@@ -1521,6 +1551,42 @@ public class TestHBaseStorage {
             DataFormat format) throws IOException {
         return prepareTable(tableName, initData, format, TableType.ONE_CF);
     }
+    private HTable prepareTableWithMultipleColumnFamilies(String tableName) throws IOException  {
+      byte[][] families = new byte[2][];
+      families[0] = COLUMNFAMILY;
+      families[1] = COLUMNFAMILY2;
+
+      // define the table schema
+      HTable table = null;
+      try {
+        deleteAllRows(tableName);
+      } catch (Exception e) {
+        // It's ok, table might not exist.
+      }
+      try {
+        table = util.createTable(Bytes.toBytesBinary(tableName), families);
+        // table.alterTable ...
+      } catch (Exception e) {
+        table = new HTable(conf, Bytes.toBytesBinary(tableName));
+      }
+
+      String v = "abc";
+
+      // row key: string type
+      Put put = new Put("ROWKEY".getBytes());
+
+      // col_a: string type
+      put.add(COLUMNFAMILY, Bytes.toBytes("col_a"), v.getBytes());
+      // col_b: string type
+      put.add(COLUMNFAMILY2, Bytes.toBytes("col_b"), v.getBytes());
+
+      table.put(put);
+
+      table.flushCommits();
+
+      return table;
+    }
+
     /**
      * Prepare a table in hbase for testing.
      *
@@ -1539,14 +1605,9 @@ public class TestHBaseStorage {
             // It's ok, table might not exist.
         }
         try {
-            if (type == TableType.TWO_CF) {
-                table = util.createTable(Bytes.toBytesBinary(tableName),
-                        new byte[][]{COLUMNFAMILY, COLUMNFAMILY2});
-            } else {
-                table = util.createTable(Bytes.toBytesBinary(tableName),
-                        COLUMNFAMILY);
-            }
-            lastTableType = type;
+        table = util.createTable(Bytes.toBytesBinary(tableName),
+                COLUMNFAMILY);
+        // table.alterTable ...
         } catch (Exception e) {
             table = new HTable(conf, Bytes.toBytesBinary(tableName));
         }

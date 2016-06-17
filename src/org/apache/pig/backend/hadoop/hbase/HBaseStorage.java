@@ -492,11 +492,15 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
         }
 
         if (!columnPrefixExists) {
-            addFiltersWithoutColumnPrefix(columnInfo_);
+          addFiltersWithoutColumnPrefix(columnInfo_);
         }
         else {
-            addFiltersWithColumnPrefix(columnInfo_);
+          addFiltersWithColumnPrefix(columnInfo_);
         }
+    }
+
+    private boolean loadAllColumns(List<ColumnInfo> columnInfo) {
+      return columnInfo.size() == 1 && columnInfo.get(0).isStar();
     }
 
     /**
@@ -504,6 +508,10 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
      * addFamily on the scan
      */
     private void addFiltersWithoutColumnPrefix(List<ColumnInfo> columnInfos) {
+        if(loadAllColumns(columnInfos)) {
+          return;
+        }
+
         // Need to check for mixed types in a family, so we don't call addColumn
         // after addFamily on the same family
         Map<String, List<ColumnInfo>> groupedMap = groupByFamily(columnInfos);
@@ -551,6 +559,10 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
      *  care of that.
      */
     private void addFiltersWithColumnPrefix(List<ColumnInfo> columnInfos) {
+        if(loadAllColumns(columnInfos)) {
+          return;
+        }
+
         // we need to apply a CF AND column list filter for each family
         FilterList allColumnFilters = null;
         Map<String, List<ColumnInfo>> groupedMap = groupByFamily(columnInfos);
@@ -682,7 +694,34 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
                     int currentIndex = startIndex + i;
 
                     ColumnInfo columnInfo = columnInfo_.get(i);
-                    if (columnInfo.isColumnMap()) {
+                    if(loadAllColumns(columnInfo_)) {
+                      Map<String, DataByteArray> cfMap = new HashMap<String, DataByteArray>();
+
+                      for(Entry<byte[],NavigableMap<byte[],byte[]>> entry: resultsMap.entrySet()) {
+                            NavigableMap<byte[], byte[]> cfResults = entry.getValue();
+
+                            for (byte[] quantifier : cfResults.keySet()) {
+                                // We need to check against the prefix filter to
+                                // see if this value should be included. We can't
+                                // just rely on the server-side filter, since a
+                                // user could specify multiple CF filters for the
+                                // same CF.
+                                if (columnInfo.getColumnPrefix() == null ||
+                                        //prefix == cf1
+                                        columnInfo.hasPrefixMatch(quantifier)) {
+
+                                    byte[] cell = cfResults.get(quantifier);
+                                    DataByteArray value =
+                                            cell == null ? null : new DataByteArray(cell);
+                                    cfMap.put(Bytes.toString(quantifier), value);
+                                }
+                            }
+                      }
+
+                      tuple.set(currentIndex, cfMap);
+                    }
+                    // cf1:*
+                    else if (columnInfo.isColumnMap()) {
                         // It's a column family so we need to iterate and set all
                         // values found
                         NavigableMap<byte[], byte[]> cfResults =
@@ -691,6 +730,7 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
                                 new HashMap<String, DataByteArray>();
 
                         if (cfResults != null) {
+                            //cf1, cf2
                             for (byte[] quantifier : cfResults.keySet()) {
                                 // We need to check against the prefix filter to
                                 // see if this value should be included. We can't
@@ -698,6 +738,7 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
                                 // user could specify multiple CF filters for the
                                 // same CF.
                                 if (columnInfo.getColumnPrefix() == null ||
+                                        //prefix == cf1
                                         columnInfo.hasPrefixMatch(quantifier)) {
 
                                     byte[] cell = cfResults.get(quantifier);
@@ -1256,6 +1297,7 @@ public class HBaseStorage extends LoadFunc implements StoreFuncInterface, LoadPu
             }
         }
 
+        public boolean isStar() { return ASTERISK.equals(originalColumnName);  }
         public byte[] getColumnFamily() { return columnFamily; }
         public byte[] getColumnName() { return columnName; }
         public byte[] getColumnPrefix() { return columnPrefix; }

@@ -31,7 +31,7 @@
     <property name="pigsmoke.pom" value="${basedir}/ivy/pigsmoke.pom" />
     <property name="pigunit.pom" value="${basedir}/ivy/pigunit.pom" />
     <property name="piggybank.pom" value="${basedir}/ivy/piggybank.pom" />
-    <property name="pig.version" value="0.16.0" />
+    <property name="pig.version" value="0.16.1" />
     <property name="pig.version.suffix" value="-KORRELATE" />
     <property name="version" value="${pig.version}${pig.version.suffix}" />
     <property name="final.name" value="${name}-${version}" />
@@ -148,7 +148,7 @@
     <condition property="isWindows">
       <os family="windows"/>
     </condition>
-	
+
     <target name="setTezEnv">
         <propertyreset name="test.timeout" value="900000" />
         <propertyreset name="hadoopversion" value="23" />
@@ -882,7 +882,7 @@
         <macro-test-runner test.file="${test.all.file}" tests.failed="test-tez.failed"/>
         <fail if="test-tez.failed">Tests failed!</fail>
     </target>
-	
+
     <target name="debugger.check" depends="debugger.set,debugger.unset"/>
     <target name="debugger.set" if="debugPort">
         <property name="debugArgs" value="-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=y,address=${debugPort}"/>
@@ -1050,11 +1050,11 @@
     <target name="package-h12" depends="jar-h12, docs, api-report, piggybank" description="Create a Pig tar release">
         <package-base/>
     </target>
-	
+
     <target name="package" depends="jar, docs, api-report, piggybank" description="Create a Pig tar release">
         <package-base/>
     </target>
-	
+
     <macrodef name="package-base">
       <sequential>
         <mkdir dir="${tar.dist.dir}" />
@@ -1675,7 +1675,7 @@
      </target>
 
      <target name="ivy-releaseaudit" depends="ivy-resolve" description="Retrieve Ivy-managed artifacts for releaseaudit configuration">
-        <ivy:retrieve settingsRef="${ant.project.name}.ivy.settings" log="${loglevel}"  
+        <ivy:retrieve settingsRef="${ant.project.name}.ivy.settings" log="${loglevel}"
                  pattern="${build.ivy.lib.dir}/${ivy.artifact.retrieve.pattern}" conf="releaseaudit"/>
        <ivy:cachepath pathid="releaseaudit.classpath" conf="releaseaudit"/>
      </target>
